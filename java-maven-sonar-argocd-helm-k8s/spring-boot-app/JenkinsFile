@@ -1,9 +1,9 @@
+This is my Jenkinsfile:
 pipeline {
   agent {
     docker {
       image 'naveenalapati9/jenkins-agent:jdk17'
-      args '-v /var/run/docker.sock:/var/run/docker.sock'
-      reuseNode true
+      args '--user root -v /var/run/docker.sock:/var/run/docker.sock'
     }
   }
 
@@ -21,13 +21,7 @@ pipeline {
 
     stage('Checkout') {
       steps {
-        sh '''
-          echo passed
-          whoami
-          pwd
-          java -version
-          mvn -version
-        '''
+        sh 'echo passed'
       }
     }
 
@@ -45,6 +39,8 @@ pipeline {
       steps {
         withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
           sh '''
+            java -version
+            mvn -version
             cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
             mvn sonar:sonar -Dsonar.login=$SONAR_AUTH_TOKEN -Dsonar.host.url=$SONAR_URL
           '''
@@ -87,6 +83,12 @@ pipeline {
           '''
         }
       }
+    }
+  }
+
+  post {
+    always {
+      sh 'chown -R 1000:1000 . || true'
     }
   }
 }

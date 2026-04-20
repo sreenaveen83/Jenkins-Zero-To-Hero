@@ -1,9 +1,7 @@
 pipeline {
   agent {
     docker {
-      // Updated to use the v5/v6 image (without the alpine sh issue and without the ENTRYPOINT tail command)
       image 'naveenalapati9/maven-docker-agent:v5'
-      // Preserved the root user and socket map to fix the exit code -2 / volume map permission issues
       args '-v /var/run/docker.sock:/var/run/docker.sock -u root:root'
     }
   }
@@ -22,7 +20,9 @@ pipeline {
   stages {
     stage('Checkout SCM') {
       steps {
-        deleteDir()
+        // SAFE CLEANUP: Empties the directory without deleting the root folder itself,
+        // preventing the "current working directory is outside of container mount namespace" error.
+        sh 'rm -rf ./* ./.git || true'
         checkout scm
       }
     }
@@ -101,6 +101,8 @@ pipeline {
 
   post {
     always {
+      // Optional: Add cleanWs() here if you want Jenkins to completely wipe the workspace 
+      // AFTER the Docker container has successfully finished and detached.
       echo 'Pipeline execution completed.'
     }
     success {

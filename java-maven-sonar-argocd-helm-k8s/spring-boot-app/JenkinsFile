@@ -22,6 +22,18 @@ pipeline {
       steps {
         sh 'rm -rf ./* ./.git || true'
         checkout scm
+        
+        script {
+          // Get the name of the user who made the last commit
+          def commitAuthor = sh(script: "git log -1 --pretty=format:'%an'", returnStdout: true).trim()
+          
+          // If the commit was made by our Jenkins bot, abort the pipeline
+          // This prevents an infinite loop when Jenkins pushes the deployment file back to GitHub
+          if (commitAuthor == "Sree Naveen") {
+            currentBuild.result = 'ABORTED'
+            error("Stopping build: Commit was made by Jenkins bot (${commitAuthor})")
+          }
+        }
       }
     }
 
@@ -82,19 +94,19 @@ pipeline {
       steps {
         withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
           sh '''
-            # 1. FIX: Tell Git to trust the workspace directory despite the root/jenkins ownership mismatch
+            # Tell Git to trust the workspace directory despite the root/jenkins ownership mismatch
             git config --global --add safe.directory '*'
 
-            # 2. Setup Git user credentials
+            # Setup Git user credentials (Must match the check in Checkout SCM stage!)
             git config --global user.email "naveenalapati@gmail.com"
             git config --global user.name "Sree Naveen"
 
-            # 3. Enter the repository subfolder and modify the deployment file
+            # Enter the repository subfolder and modify the deployment file
             cd java-maven-sonar-argocd-helm-k8s
             sed -i "s|image: naveenalapati9/ultimate-cicd:.*|image: naveenalapati9/ultimate-cicd:${BUILD_NUMBER}|g" \
               spring-boot-app-manifests/deployment.yml
 
-            # 4. Commit and push the changes back to GitHub
+            # Commit and push the changes back to GitHub
             git add spring-boot-app-manifests/deployment.yml
             git commit -m "Update deployment image to version ${BUILD_NUMBER}" || echo "No changes to commit"
             git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main

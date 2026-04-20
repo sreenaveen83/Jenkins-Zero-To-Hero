@@ -85,8 +85,8 @@ pipeline {
             # Enter the git repository directory before running git commands
             cd java-maven-sonar-argocd-helm-k8s
 
-            git config user.email "naveenalapati@gmail.com"
-            git config user.name "Sree Naveen"
+            git config --global user.email "naveenalapati@gmail.com"
+            git config --global user.name "Sree Naveen"
 
             sed -i "s|image: naveenalapati9/ultimate-cicd:.*|image: naveenalapati9/ultimate-cicd:${BUILD_NUMBER}|g" \
               spring-boot-app-manifests/deployment.yml

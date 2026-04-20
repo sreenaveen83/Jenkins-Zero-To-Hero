@@ -24,14 +24,13 @@ pipeline {
         checkout scm
         
         script {
-          // Get the name of the user who made the last commit
+          // Get the name of the author who made the last commit
           def commitAuthor = sh(script: "git log -1 --pretty=format:'%an'", returnStdout: true).trim()
           
-          // If the commit was made by our Jenkins bot, abort the pipeline
-          // This prevents an infinite loop when Jenkins pushes the deployment file back to GitHub
-          if (commitAuthor == "Sree Naveen") {
+          // If the commit was made by the bot, abort the pipeline to prevent an infinite loop
+          if (commitAuthor == "Jenkins CI Bot") {
             currentBuild.result = 'ABORTED'
-            error("Stopping build: Commit was made by Jenkins bot (${commitAuthor})")
+            error("Stopping build: Commit was made by ${commitAuthor} (Loop Prevention)")
           }
         }
       }
@@ -97,9 +96,9 @@ pipeline {
             # Tell Git to trust the workspace directory despite the root/jenkins ownership mismatch
             git config --global --add safe.directory '*'
 
-            # Setup Git user credentials (Must match the check in Checkout SCM stage!)
-            git config --global user.email "naveenalapati@gmail.com"
-            git config --global user.name "Sree Naveen"
+            # Setup Git credentials specifically for the Jenkins Bot
+            git config --global user.email "jenkins-bot@cicd.com"
+            git config --global user.name "Jenkins CI Bot"
 
             # Enter the repository subfolder and modify the deployment file
             cd java-maven-sonar-argocd-helm-k8s

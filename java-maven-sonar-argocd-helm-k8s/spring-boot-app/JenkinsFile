@@ -24,6 +24,9 @@ pipeline {
         checkout scm
         
         script {
+          // Tell Git to trust the workspace directory despite the root/jenkins ownership mismatch
+          sh "git config --global --add safe.directory '*'"
+
           // Get the name of the author who made the last commit
           def commitAuthor = sh(script: "git log -1 --pretty=format:'%an'", returnStdout: true).trim()
           

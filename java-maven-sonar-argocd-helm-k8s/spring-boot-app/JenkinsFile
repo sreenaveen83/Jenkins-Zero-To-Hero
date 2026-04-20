@@ -6,7 +6,18 @@ pipeline {
     }
   }
 
+  options {
+    skipDefaultCheckout(true)
+  }
+
   stages {
+    stage('Checkout SCM') {
+      steps {
+        deleteDir()
+        checkout scm
+      }
+    }
+
     stage('Checkout') {
       steps {
         sh 'echo passed'
@@ -71,6 +82,12 @@ pipeline {
           '''
         }
       }
+    }
+  }
+
+  post {
+    always {
+      sh 'chown -R 1000:1000 . || true'
     }
   }
 }

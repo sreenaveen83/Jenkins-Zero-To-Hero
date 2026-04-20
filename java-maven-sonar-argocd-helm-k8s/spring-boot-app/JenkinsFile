@@ -1,5 +1,5 @@
 pipeline {
-  agent any
+  agent none
 
   options {
     skipDefaultCheckout(true)
@@ -7,32 +7,39 @@ pipeline {
 
   stages {
     stage('Checkout SCM') {
+      agent any
       steps {
         deleteDir()
         checkout scm
       }
     }
 
-    stage('Checkout') {
+    stage('Build and Test') {
+      agent {
+        docker {
+          image 'maven:3.9.6-eclipse-temurin-17'
+          args '-v $HOME/.m2:/root/.m2'
+          reuseNode true
+        }
+      }
       steps {
         sh '''
-          echo passed
-          whoami
-          pwd
+          cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
           java -version
           mvn -version
+          mvn clean package
         '''
       }
     }
 
-    stage('Build and Test') {
-      steps {
-        sh 'ls -ltr'
-        sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && mvn clean package'
-      }
-    }
-
     stage('Static Code Analysis') {
+      agent {
+        docker {
+          image 'maven:3.9.6-eclipse-temurin-17'
+          args '-v $HOME/.m2:/root/.m2'
+          reuseNode true
+        }
+      }
       environment {
         SONAR_URL = "http://98.88.248.154:9000"
       }
@@ -40,13 +47,16 @@ pipeline {
         withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
           sh '''
             cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
-            mvn org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar -Dsonar.token=$SONAR_AUTH_TOKEN -Dsonar.host.url=$SONAR_URL
+            mvn org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
+              -Dsonar.token=$SONAR_AUTH_TOKEN \
+              -Dsonar.host.url=$SONAR_URL
           '''
         }
       }
     }
 
     stage('Build and Push Docker Image') {
+      agent any
       environment {
         DOCKER_IMAGE = "naveenalapati9/ultimate-cicd:${BUILD_NUMBER}"
       }
@@ -62,6 +72,12 @@ pipeline {
     }
 
     stage('Update Deployment File') {
+      agent {
+        docker {
+          image 'alpine/git:latest'
+          reuseNode true
+        }
+      }
       environment {
         GIT_REPO_NAME = "Jenkins-Zero-To-Hero"
         GIT_USER_NAME = "sreenaveen83"
@@ -69,6 +85,8 @@ pipeline {
       steps {
         withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
           sh '''
+            apk add --no-cache sed
+
             git config user.email "naveenalapati@gmail.com"
             git config user.name "Sree Naveen"
 

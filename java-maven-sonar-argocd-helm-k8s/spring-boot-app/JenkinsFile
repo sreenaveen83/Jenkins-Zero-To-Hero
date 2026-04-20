@@ -20,8 +20,6 @@ pipeline {
   stages {
     stage('Checkout SCM') {
       steps {
-        // SAFE CLEANUP: Empties the directory without deleting the root folder itself,
-        // preventing the "current working directory is outside of container mount namespace" error.
         sh 'rm -rf ./* ./.git || true'
         checkout scm
       }
@@ -84,13 +82,16 @@ pipeline {
       steps {
         withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
           sh '''
+            # Enter the git repository directory before running git commands
+            cd java-maven-sonar-argocd-helm-k8s
+
             git config user.email "naveenalapati@gmail.com"
             git config user.name "Sree Naveen"
 
             sed -i "s|image: naveenalapati9/ultimate-cicd:.*|image: naveenalapati9/ultimate-cicd:${BUILD_NUMBER}|g" \
-              java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
+              spring-boot-app-manifests/deployment.yml
 
-            git add java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
+            git add spring-boot-app-manifests/deployment.yml
             git commit -m "Update deployment image to version ${BUILD_NUMBER}" || echo "No changes to commit"
             git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
           '''
@@ -101,8 +102,6 @@ pipeline {
 
   post {
     always {
-      // Optional: Add cleanWs() here if you want Jenkins to completely wipe the workspace 
-      // AFTER the Docker container has successfully finished and detached.
       echo 'Pipeline execution completed.'
     }
     success {

@@ -1,7 +1,7 @@
 pipeline {
   agent {
     docker {
-      image 'naveenalapati9/maven-docker-agent:v4'
+      image 'naveenalapati9/maven-docker-agent:v5'
       args '-v /var/run/docker.sock:/var/run/docker.sock -u 1000:1000'
       // reuseNode true <- REMOVED: This is invalid at the top-level block
     }

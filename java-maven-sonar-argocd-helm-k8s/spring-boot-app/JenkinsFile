@@ -82,15 +82,19 @@ pipeline {
       steps {
         withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
           sh '''
-            # Enter the git repository directory before running git commands
-            cd java-maven-sonar-argocd-helm-k8s
+            # 1. FIX: Tell Git to trust the workspace directory despite the root/jenkins ownership mismatch
+            git config --global --add safe.directory '*'
 
+            # 2. Setup Git user credentials
             git config --global user.email "naveenalapati@gmail.com"
             git config --global user.name "Sree Naveen"
 
+            # 3. Enter the repository subfolder and modify the deployment file
+            cd java-maven-sonar-argocd-helm-k8s
             sed -i "s|image: naveenalapati9/ultimate-cicd:.*|image: naveenalapati9/ultimate-cicd:${BUILD_NUMBER}|g" \
               spring-boot-app-manifests/deployment.yml
 
+            # 4. Commit and push the changes back to GitHub
             git add spring-boot-app-manifests/deployment.yml
             git commit -m "Update deployment image to version ${BUILD_NUMBER}" || echo "No changes to commit"
             git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main

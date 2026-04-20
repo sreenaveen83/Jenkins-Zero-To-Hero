@@ -1,9 +1,10 @@
 pipeline {
   agent {
     docker {
+      // Updated to use the v5/v6 image (without the alpine sh issue and without the ENTRYPOINT tail command)
       image 'naveenalapati9/maven-docker-agent:v5'
-      args '-v /var/run/docker.sock:/var/run/docker.sock -u 1000:1000'
-      // reuseNode true <- REMOVED: This is invalid at the top-level block
+      // Preserved the root user and socket map to fix the exit code -2 / volume map permission issues
+      args '-v /var/run/docker.sock:/var/run/docker.sock -u root:root'
     }
   }
 

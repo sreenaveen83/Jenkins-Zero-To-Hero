@@ -1,8 +1,8 @@
 pipeline {
   agent {
     docker {
-      image 'naveenalapati9/maven-docker-agent:v1'
-      args '--user root -v /var/run/docker.sock:/var/run/docker.sock'
+      image 'naveenalapati9/maven-docker-agent:v2'
+      args '-u root:root -v /var/run/docker.sock:/var/run/docker.sock'
       reuseNode true
     }
   }

@@ -22,15 +22,12 @@ pipeline {
       steps {
         sh 'rm -rf ./* ./.git || true'
         checkout scm
-        
+
         script {
-          // Tell Git to trust the workspace directory despite the root/jenkins ownership mismatch
           sh "git config --global --add safe.directory '*'"
 
-          // Get the name of the author who made the last commit
           def commitAuthor = sh(script: "git log -1 --pretty=format:'%an'", returnStdout: true).trim()
-          
-          // If the commit was made by the bot, abort the pipeline to prevent an infinite loop
+
           if (commitAuthor == "Jenkins CI Bot") {
             currentBuild.result = 'ABORTED'
             error("Stopping build: Commit was made by ${commitAuthor} (Loop Prevention)")
@@ -58,6 +55,13 @@ pipeline {
       steps {
         sh '''
           cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
+
+          echo "===== CURRENT GIT COMMIT ====="
+          git rev-parse HEAD || true
+
+          echo "===== INDEX.HTML FROM WORKSPACE ====="
+          cat src/main/resources/templates/index.html
+
           mvn clean package
         '''
       }
@@ -96,19 +100,15 @@ pipeline {
       steps {
         withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
           sh '''
-            # Tell Git to trust the workspace directory despite the root/jenkins ownership mismatch
             git config --global --add safe.directory '*'
-
-            # Setup Git credentials specifically for the Jenkins Bot
             git config --global user.email "jenkins-bot@cicd.com"
             git config --global user.name "Jenkins CI Bot"
 
-            # Enter the repository subfolder and modify the deployment file
             cd java-maven-sonar-argocd-helm-k8s
+
             sed -i "s|image: naveenalapati9/ultimate-cicd:.*|image: naveenalapati9/ultimate-cicd:${BUILD_NUMBER}|g" \
               spring-boot-app-manifests/deployment.yml
 
-            # Commit and push the changes back to GitHub
             git add spring-boot-app-manifests/deployment.yml
             git commit -m "Update deployment image to version ${BUILD_NUMBER}" || echo "No changes to commit"
             git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main

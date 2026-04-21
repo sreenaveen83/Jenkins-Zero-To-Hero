@@ -1,7 +1,7 @@
 pipeline {
   agent {
     docker {
-      image 'naveenalapati9/maven-docker-agent:v5'
+      image 'naveenalapati9/maven-docker-agent:v6'
       args '-v /var/run/docker.sock:/var/run/docker.sock -u root:root'
     }
   }

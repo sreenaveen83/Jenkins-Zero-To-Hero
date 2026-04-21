@@ -14,6 +14,7 @@ pipeline {
   }
 
   environment {
+    SONAR_URL     = 'http://54.163.48.231:9000'
     GIT_REPO_NAME = 'Jenkins-Zero-To-Hero'
     GIT_USER_NAME = 'sreenaveen83'
     GIT_SSH_URL   = "git@github.com:${GIT_USER_NAME}/${GIT_REPO_NAME}.git"
@@ -30,7 +31,11 @@ pipeline {
 
         script {
           def commitAuthor = sh(
-            script: "git log -1 --pretty=format:'%an'",
+            script: '''
+              git config --global --add safe.directory "$WORKSPACE"
+              git config --global --add safe.directory '*'
+              git log -1 --pretty=format:%an
+            ''',
             returnStdout: true
           ).trim()
 
@@ -51,6 +56,9 @@ pipeline {
           mvn -version
           git --version
           docker --version
+          ssh -V || true
+          which ssh-agent || true
+          which ssh-keyscan || true
         '''
       }
     }
@@ -72,9 +80,6 @@ pipeline {
     }
 
     stage('SonarQube Analysis') {
-      environment {
-        SONAR_URL = 'http://54.163.48.231:9000'
-      }
       steps {
         withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
           dir("${APP_DIR}") {
@@ -92,7 +97,7 @@ pipeline {
       steps {
         dir("${APP_DIR}") {
           script {
-            dockerImage = docker.build("${IMAGE_NAME}")
+            docker.build("${IMAGE_NAME}")
           }
         }
       }
@@ -101,9 +106,10 @@ pipeline {
     stage('Push Docker Image') {
       steps {
         script {
+          def builtImage = docker.image("${IMAGE_NAME}")
           docker.withRegistry('https://index.docker.io/v1/', 'docker-cred') {
-            dockerImage.push()
-            dockerImage.push('latest')
+            builtImage.push()
+            builtImage.push('latest')
           }
         }
       }
@@ -114,6 +120,8 @@ pipeline {
         sshagent(credentials: ['github-ssh']) {
           dir("${MANIFEST_DIR}") {
             sh '''
+              git config --global --add safe.directory "$WORKSPACE"
+              git config --global --add safe.directory '*'
               git config user.email "jenkins-bot@cicd.com"
               git config user.name "Jenkins CI Bot"
 
@@ -144,7 +152,6 @@ pipeline {
   post {
     always {
       echo 'Pipeline execution completed.'
-      cleanWs()
     }
     success {
       echo 'Pipeline completed successfully.'

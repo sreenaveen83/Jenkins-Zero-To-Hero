@@ -1,55 +1,50 @@
+Is this good way of creating a Jenkinsfile?
 pipeline {
   agent {
     docker {
       image 'naveenalapati9/maven-docker-agent:v6'
-      args '-v /var/run/docker.sock:/var/run/docker.sock -u 111:113 -e HOME=/tmp'
-      reuseNode true
+      args '-v /var/run/docker.sock:/var/run/docker.sock -u root:root'
     }
   }
 
   options {
     skipDefaultCheckout(true)
-    timestamps()
-    disableConcurrentBuilds()
   }
 
   environment {
-    SONAR_URL     = 'http://54.163.48.231:9000'
-    GIT_REPO_NAME = 'Jenkins-Zero-To-Hero'
-    GIT_USER_NAME = 'sreenaveen83'
-    GIT_SSH_URL   = "git@github.com:${GIT_USER_NAME}/${GIT_REPO_NAME}.git"
-    APP_DIR       = 'java-maven-sonar-argocd-helm-k8s/spring-boot-app'
-    MANIFEST_DIR  = 'java-maven-sonar-argocd-helm-k8s'
-    IMAGE_NAME    = "naveenalapati9/ultimate-cicd:${BUILD_NUMBER}"
+    SONAR_URL = "http://54.163.48.231:9000"
+    GIT_REPO_NAME = "Jenkins-Zero-To-Hero"
+    GIT_USER_NAME = "sreenaveen83"
+    DOCKER_IMAGE = "naveenalapati9/ultimate-cicd:${BUILD_NUMBER}"
+    GIT_SSH_URL = "git@github.com:${GIT_USER_NAME}/${GIT_REPO_NAME}.git"
   }
 
   stages {
-    stage('Checkout') {
+    stage('Checkout SCM') {
       steps {
-        deleteDir()
+        sh 'rm -rf ./* ./.git || true'
         checkout scm
 
         script {
+          sh "git config --global --add safe.directory '*'"
+
           def commitAuthor = sh(
-            script: '''
-              git config --global --add safe.directory "$WORKSPACE"
-              git config --global --add safe.directory '*'
-              git log -1 --pretty=format:%an
-            ''',
+            script: "git log -1 --pretty=format:'%an'",
             returnStdout: true
           ).trim()
 
-          if (commitAuthor == 'Jenkins CI Bot') {
+          if (commitAuthor == "Jenkins CI Bot") {
             currentBuild.result = 'ABORTED'
-            error("Stopping build: commit created by ${commitAuthor}")
+            error("Stopping build: Commit was made by ${commitAuthor} (Loop Prevention)")
           }
         }
       }
     }
 
-    stage('Verify Environment') {
+    stage('Verify Tools') {
       steps {
         sh '''
+          echo "Running inside Docker agent"
           whoami
           pwd
           java -version
@@ -57,93 +52,80 @@ pipeline {
           git --version
           docker --version
           ssh -V || true
-          which ssh-agent || true
           which ssh-keyscan || true
+          ls -ltr
         '''
       }
     }
 
-    stage('Build') {
+    stage('Build and Test') {
       steps {
-        dir("${APP_DIR}") {
-          sh 'mvn -B clean package'
-        }
+        sh '''
+          cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
+
+          echo "===== CURRENT GIT COMMIT ====="
+          git rev-parse HEAD || true
+
+          echo "===== INDEX.HTML FROM WORKSPACE ====="
+          cat src/main/resources/templates/index.html
+
+          mvn clean package
+        '''
       }
     }
 
-    stage('Test Reports') {
-      steps {
-        dir("${APP_DIR}") {
-          junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
-        }
-      }
-    }
-
-    stage('SonarQube Analysis') {
+    stage('Static Code Analysis') {
       steps {
         withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
-          dir("${APP_DIR}") {
-            sh '''
-              mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
-                -Dsonar.token=$SONAR_AUTH_TOKEN \
-                -Dsonar.host.url=$SONAR_URL
-            '''
-          }
+          sh '''
+            cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
+            mvn org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \\
+              -Dsonar.token=$SONAR_AUTH_TOKEN \\
+              -Dsonar.host.url=$SONAR_URL
+          '''
         }
       }
     }
 
-    stage('Build Docker Image') {
-      steps {
-        dir("${APP_DIR}") {
-          script {
-            docker.build("${IMAGE_NAME}")
-          }
-        }
-      }
-    }
-
-    stage('Push Docker Image') {
+    stage('Build and Push Docker Image') {
       steps {
         script {
-          def builtImage = docker.image("${IMAGE_NAME}")
+          sh '''
+            cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
+            docker build -t ${DOCKER_IMAGE} .
+          '''
+
+          def dockerImage = docker.image("${DOCKER_IMAGE}")
           docker.withRegistry('https://index.docker.io/v1/', 'docker-cred') {
-            builtImage.push()
-            builtImage.push('latest')
+            dockerImage.push()
           }
         }
       }
     }
 
-    stage('Update Manifest') {
+    stage('Update Deployment File') {
       steps {
         sshagent(credentials: ['github-ssh']) {
-          dir("${MANIFEST_DIR}") {
-            sh '''
-              git config --global --add safe.directory "$WORKSPACE"
-              git config --global --add safe.directory '*'
-              git config user.email "jenkins-bot@cicd.com"
-              git config user.name "Jenkins CI Bot"
+          sh '''
+            git config --global --add safe.directory '*'
+            git config --global user.email "jenkins-bot@cicd.com"
+            git config --global user.name "Jenkins CI Bot"
 
-              mkdir -p ~/.ssh
-              ssh-keyscan github.com >> ~/.ssh/known_hosts
-              chmod 600 ~/.ssh/known_hosts
+            mkdir -p ~/.ssh
+            ssh-keyscan github.com >> ~/.ssh/known_hosts
+            chmod 600 ~/.ssh/known_hosts
 
-              git remote set-url origin ${GIT_SSH_URL}
+            cd java-maven-sonar-argocd-helm-k8s
 
-              sed -i "s|image: naveenalapati9/ultimate-cicd:.*|image: ${IMAGE_NAME}|g" \
-                spring-boot-app-manifests/deployment.yaml
+            git remote set-url origin ${GIT_SSH_URL}
 
-              git add spring-boot-app-manifests/deployment.yaml
+            sed -i "s|image: naveenalapati9/ultimate-cicd:.*|image: naveenalapati9/ultimate-cicd:${BUILD_NUMBER}|g" \\
+              spring-boot-app-manifests/deployment.yaml
 
-              if ! git diff --cached --quiet; then
-                git commit -m "Update deployment image to version ${BUILD_NUMBER}"
-                git push origin HEAD:main
-              else
-                echo "No manifest changes detected"
-              fi
-            '''
-          }
+            git add spring-boot-app-manifests/deployment.yaml
+            git commit -m "Update deployment image to version ${BUILD_NUMBER}" || echo "No changes to commit"
+            git push origin HEAD:main
+          '''
         }
       }
     }
@@ -158,9 +140,6 @@ pipeline {
     }
     failure {
       echo 'Pipeline failed.'
-    }
-    aborted {
-      echo 'Pipeline aborted.'
     }
   }
 }

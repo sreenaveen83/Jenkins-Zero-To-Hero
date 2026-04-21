@@ -1,4 +1,3 @@
-Is this good way of creating a Jenkinsfile?
 pipeline {
   agent {
     docker {
